@@ -1,0 +1,425 @@
+// use prisma-8
+enum EmployeeRole {
+  SAE
+  TSO
+  SO
+  SR
+  ADMIN
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum RecordStatus {
+  NOT_STARTED
+  ON_PROGRESS
+  COMPLETED
+  REVISED
+}
+
+enum SalesPeriodType {
+  MONTHLY
+  QUARTERLY
+}
+
+enum AppraisalStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  FINALIZED
+}
+
+model FiscalYear {
+  id           Int                        @id @default(autoincrement())
+  name         String                     @unique
+  startDate    DateTime
+  endDate      DateTime
+  isCurrent    Boolean                    @default(false)
+  appraisals   Appraisal[]
+  salesPeriods SalesPeriod[]
+  createdAt    TimestamptzString          @default(now())
+  updatedAt    temporal.updatedAtString()
+}
+
+model Zone {
+  id          Int                        @id @default(autoincrement())
+  name        String                     @unique
+  code        String?                    @unique
+  territories Territory[]
+  employees   Employee[]
+  createdAt   TimestamptzString          @default(now())
+  updatedAt   temporal.updatedAtString()
+}
+
+model Territory {
+  id           Int                        @id @default(autoincrement())
+  name         String
+  code         String?                    @unique
+  zoneId       Int
+  zone         Zone                       @relation(fields:[zoneId], references:[id])
+  employees    Employee[]
+  distributors Distributor[]
+  createdAt    TimestamptzString          @default(now())
+  updatedAt    temporal.updatedAtString()
+
+  @@unique([zoneId, name])
+}
+
+model Role {
+  id          Int               @id @default(autoincrement())
+  name        String            @unique
+  description String?
+  employees   Employee[]
+  createdAt   TimestamptzString @default(now())
+}
+
+model Employee {
+  id                Int                        @id @default(autoincrement())
+  employeeCode      String?                    @unique
+  name              String
+  email             String?                    @unique
+  phone             String?
+  roleId            Int
+  role              Role                       @relation(fields:[roleId], references:[id])
+  zoneId            Int?
+  zone              Zone?                      @relation(fields:[zoneId], references:[id])
+  territoryId       Int?
+  territory         Territory?                 @relation(fields:[territoryId], references:[id])
+  managerId         Int?
+  manager           Employee?                  @relation("EmployeeManager", fields:[managerId], references:[id])
+  directReports     Employee[]                 @relation("EmployeeManager")
+  status            EmploymentStatus           @default(ACTIVE)
+
+  salesTargets      SalesTarget[]
+  salesAchievements SalesAchievement[]
+  appraisals        Appraisal[]
+  appraisalReviews  AppraisalReview[]
+
+  createdAt         TimestamptzString          @default(now())
+  updatedAt         temporal.updatedAtString()
+
+  @@index([roleId])
+  @@index([zoneId])
+  @@index([territoryId])
+  @@index([managerId])
+}
+
+model Distributor {
+  id          Int                        @id @default(autoincrement())
+  code        String?                    @unique
+  name        String
+  territoryId Int?
+  territory   Territory?                 @relation(fields:[territoryId], references:[id])
+  salesReps   SalesRep[]
+  createdAt   TimestamptzString          @default(now())
+  updatedAt   temporal.updatedAtString()
+}
+
+model SalesRep {
+  id             Int                        @id @default(autoincrement())
+  code           String                     @unique
+  name           String
+  distributorId  Int?
+  distributor    Distributor?               @relation(fields:[distributorId], references:[id])
+  tsoId          Int?
+  tso            Employee?                  @relation(fields:[tsoId], references:[id])
+  active         Boolean                    @default(true)
+  monthlyRecords SRMonitoring[]
+  createdAt      TimestamptzString          @default(now())
+  updatedAt      temporal.updatedAtString()
+
+  @@index([tsoId])
+  @@index([distributorId])
+}
+
+model ProductBrand {
+  id           Int                        @id @default(autoincrement())
+  name         String                     @unique
+  code         String?                    @unique
+  active       Boolean                    @default(true)
+  brandTargets BrandTarget[]
+  createdAt    TimestamptzString          @default(now())
+  updatedAt    temporal.updatedAtString()
+}
+
+model SalesPeriod {
+  id            Int                @id @default(autoincrement())
+  fiscalYearId  Int
+  fiscalYear    FiscalYear         @relation(fields:[fiscalYearId], references:[id])
+  type          SalesPeriodType
+  year          Int
+  month         Int?
+  quarter       Int?
+  startDate     DateTime
+  endDate       DateTime
+
+  targets       SalesTarget[]
+  achievements  SalesAchievement[]
+  srMonitoring  SRMonitoring[]
+  tsoMonitoring TSOMonitoring[]
+  sops          SOPReference[]
+
+  createdAt     TimestamptzString  @default(now())
+
+  @@index([fiscalYearId])
+  @@index([year, month])
+  @@index([year, quarter])
+}
+
+model SalesTarget {
+  id          Int                        @id @default(autoincrement())
+  employeeId  Int
+  employee    Employee                   @relation(fields:[employeeId], references:[id])
+  periodId    Int
+  period      SalesPeriod                @relation(fields:[periodId], references:[id])
+  targetValue Decimal
+  targetType  String
+  notes       String?
+  createdAt   TimestamptzString          @default(now())
+  updatedAt   temporal.updatedAtString()
+
+  @@unique([employeeId, periodId, targetType])
+  @@index([employeeId])
+  @@index([periodId])
+}
+
+model SalesAchievement {
+  id                 Int                        @id @default(autoincrement())
+  employeeId         Int
+  employee           Employee                   @relation(fields:[employeeId], references:[id])
+  periodId           Int
+  period             SalesPeriod                @relation(fields:[periodId], references:[id])
+  achievementValue   Decimal
+  targetValue        Decimal?
+  achievementPercent Decimal?
+  shortExcess        Decimal?
+  requiredPerDay     Decimal?
+  ranking            Int?
+  createdAt          TimestamptzString          @default(now())
+  updatedAt          temporal.updatedAtString()
+
+  @@unique([employeeId, periodId])
+  @@index([employeeId])
+  @@index([periodId])
+}
+
+model BrandTarget {
+  id                 Int                        @id @default(autoincrement())
+  brandId            Int
+  brand              ProductBrand               @relation(fields:[brandId], references:[id])
+  employeeId         Int
+  employee           Employee                   @relation(fields:[employeeId], references:[id])
+  periodId           Int
+  period             SalesPeriod                @relation(fields:[periodId], references:[id])
+  targetValue        Decimal
+  achievementValue   Decimal?
+  achievementPercent Decimal?
+  createdAt          TimestamptzString          @default(now())
+  updatedAt          temporal.updatedAtString()
+
+  @@unique([brandId, employeeId, periodId])
+}
+
+model SRMonitoring {
+  id                 Int                        @id @default(autoincrement())
+  salesRepId         Int
+  salesRep           SalesRep                   @relation(fields:[salesRepId], references:[id])
+  periodId           Int
+  period             SalesPeriod                @relation(fields:[periodId], references:[id])
+  targetValue        Decimal
+  achievementValue   Decimal
+  achievementPercent Decimal?
+  dueValue           Decimal?
+  requiredPerDay     Decimal?
+  createdAt          TimestamptzString          @default(now())
+  updatedAt          temporal.updatedAtString()
+
+  @@unique([salesRepId, periodId])
+  @@index([salesRepId])
+  @@index([periodId])
+}
+
+model TSOMonitoring {
+  id                  Int                        @id @default(autoincrement())
+  tsoId               Int
+  tso                 Employee                   @relation(fields:[tsoId], references:[id])
+  periodId            Int
+  period              SalesPeriod                @relation(fields:[periodId], references:[id])
+  targetValue         Decimal
+  ecCount             Int?
+  avgEc               Decimal?
+  achievementValue    Decimal
+  achievementPercent  Decimal?
+  shortExcess         Decimal?
+  requiredPerDay      Decimal?
+  ranking             Int?
+  actualPreviousValue Decimal?
+  ratioByActualTarget Decimal?
+  sopTarget           Decimal?
+  actualSopValue      Decimal?
+  sopRatio            Decimal?
+  sopTarget80         Decimal?
+  shortPrimary80      Decimal?
+  requiredPerDay80    Decimal?
+  createdAt           TimestamptzString          @default(now())
+  updatedAt           temporal.updatedAtString()
+
+  @@unique([tsoId, periodId])
+  @@index([tsoId])
+  @@index([periodId])
+}
+
+model SOPReference {
+  id          Int               @id @default(autoincrement())
+  periodId    Int
+  period      SalesPeriod       @relation(fields:[periodId], references:[id])
+  employeeId  Int?
+  actualValue Decimal?
+  sopTarget   Decimal?
+  ratio       Decimal?
+  target80    Decimal?
+  notes       String?
+  createdAt   TimestamptzString @default(now())
+}
+
+model AppraisalCycle {
+  id           Int                        @id @default(autoincrement())
+  name         String
+  fiscalYearId Int
+  fiscalYear   FiscalYear                 @relation(fields:[fiscalYearId], references:[id])
+  status       AppraisalStatus            @default(DRAFT)
+  startDate    DateTime
+  endDate      DateTime
+  appraisals   Appraisal[]
+  createdAt    TimestamptzString          @default(now())
+  updatedAt    temporal.updatedAtString()
+
+  @@unique([fiscalYearId, name])
+}
+
+model Appraisal {
+  id               Int                        @id @default(autoincrement())
+  employeeId       Int
+  employee         Employee                   @relation(fields:[employeeId], references:[id])
+  fiscalYearId     Int
+  fiscalYear       FiscalYear                 @relation(fields:[fiscalYearId], references:[id])
+  cycleId          Int?
+  cycle            AppraisalCycle?            @relation(fields:[cycleId], references:[id])
+  status           AppraisalStatus            @default(DRAFT)
+
+  functionalMarks  Decimal?
+  behavioralMarks  Decimal?
+  totalMarks       Decimal?
+  evaluation       EvaluationBand?
+  kpiScores        KPIScore[]
+  behavioralScores BehavioralScore[]
+  reviews          AppraisalReview[]
+
+  createdAt        TimestamptzString          @default(now())
+  updatedAt        temporal.updatedAtString()
+
+  @@unique([employeeId, fiscalYearId])
+  @@index([employeeId])
+}
+
+model KPI {
+  id           Int                        @id @default(autoincrement())
+  code         String
+  title        String
+  description  String?
+  weightage    Decimal
+  deadline     String?
+  active       Boolean                    @default(true)
+  fiscalYearId Int?
+  fiscalYear   FiscalYear?                @relation(fields:[fiscalYearId], references:[id])
+  components   KPIComponent[]
+  scores       KPIScore[]
+  createdAt    TimestamptzString          @default(now())
+  updatedAt    temporal.updatedAtString()
+
+  @@unique([code, fiscalYearId])
+}
+
+model KPIComponent {
+  id          Int               @id @default(autoincrement())
+  kpiId       Int
+  kpi         KPI               @relation(fields:[kpiId], references:[id])
+  name        String
+  percentage  Decimal?
+  targetValue Decimal?
+  unit        String?
+  createdAt   TimestamptzString @default(now())
+}
+
+model KPIScore {
+  id                 Int                        @id @default(autoincrement())
+  appraisalId        Int
+  appraisal          Appraisal                  @relation(fields:[appraisalId], references:[id])
+  kpiId              Int
+  kpi                KPI                        @relation(fields:[kpiId], references:[id])
+  targetValue        Decimal?
+  resultValue        Decimal?
+  achievementPercent Decimal?
+  markingMultiplier  Decimal?
+  weightedMarks      Decimal?
+  status             RecordStatus               @default(NOT_STARTED)
+  selfComment        String?
+  supervisorComment  String?
+  createdAt          TimestamptzString          @default(now())
+  updatedAt          temporal.updatedAtString()
+
+  @@unique([appraisalId, kpiId])
+}
+
+model BehavioralCompetency {
+  id          Int               @id @default(autoincrement())
+  name        String            @unique
+  description String?
+  active      Boolean           @default(true)
+  scores      BehavioralScore[]
+  createdAt   TimestamptzString @default(now())
+}
+
+model BehavioralScore {
+  id           Int                  @id @default(autoincrement())
+  appraisalId  Int
+  appraisal    Appraisal            @relation(fields:[appraisalId], references:[id])
+  competencyId Int
+  competency   BehavioralCompetency @relation(fields:[competencyId], references:[id])
+  marks        Decimal?
+  maxMarks     Decimal?
+  comment      String?
+  createdAt    TimestamptzString    @default(now())
+
+  @@unique([appraisalId, competencyId])
+}
+
+model MarkingCondition {
+  id             Int               @id @default(autoincrement())
+  minAchievement Decimal
+  maxAchievement Decimal?
+  multiplier     Decimal
+  label          String?
+  createdAt      TimestamptzString @default(now())
+}
+
+enum EvaluationBand {
+  POOR
+  AVERAGE
+  GOOD
+  EXCELLENT
+  OUTSTANDING
+}
+
+model AppraisalReview {
+  id          Int               @id @default(autoincrement())
+  appraisalId Int
+  appraisal   Appraisal         @relation(fields:[appraisalId], references:[id])
+  reviewerId  Int
+  reviewer    Employee          @relation(fields:[reviewerId], references:[id])
+  comments    String?
+  reviewedAt  DateTime?
+  createdAt   TimestamptzString @default(now())
+}
